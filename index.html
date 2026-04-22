@@ -12,9 +12,9 @@
         .section { margin-bottom: 25px; padding: 15px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa; }
         .section h2 { font-size: 16px; margin-top: 0; margin-bottom: 15px; color: #0056b3; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .input-group { display: flex; justify-content: space-between; align-items: center; }
+        .input-group { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .input-group label { font-size: 14px; }
-        .input-group input { width: 80px; padding: 5px; text-align: right; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        .input-group input { width: 100px; padding: 6px; text-align: right; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
         .gross-input { margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ccc; }
         .gross-input input { width: 120px; background-color: #e8f0fe; }
         .result-text { font-weight: bold; font-size: 16px; text-align: right; color: #d9534f; margin-top: 10px; }
@@ -22,9 +22,13 @@
         .summary-item { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 10px; }
         .summary-item.bold { font-weight: bold; font-size: 18px; }
         .difference-error { color: #d9534f; font-weight: bold; }
-        textarea { width: 100%; height: 150px; padding: 10px; box-sizing: border-box; font-family: monospace; border-radius: 4px; border: 1px solid #ccc; resize: vertical; }
-        button { display: block; width: 100%; background: #0056b3; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; font-weight: bold; }
-        button:hover { background: #004494; }
+        textarea { width: 100%; height: 180px; padding: 10px; box-sizing: border-box; font-family: monospace; border-radius: 4px; border: 1px solid #ccc; resize: vertical; }
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        button { flex: 1; border: none; padding: 12px; font-size: 14px; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; }
+        .btn-copy { background: #0056b3; }
+        .btn-copy:hover { background: #004494; }
+        .btn-csv { background: #28a745; }
+        .btn-csv:hover { background: #218838; }
     </style>
 </head>
 <body>
@@ -56,8 +60,10 @@
     <div class="section">
         <h2>2. 本日の売上</h2>
         <div class="input-group"><label>現金売上</label><input type="number" min="0" id="salesCash" class="sales-input"></div>
-        <div class="input-group" style="margin-top:10px;"><label>キャッシュレス売上</label><input type="number" min="0" id="salesCard" class="sales-input"></div>
-        <div class="input-group" style="margin-top:10px;"><label>売掛</label><input type="number" min="0" id="salesCredit" class="sales-input"></div>
+        <div class="input-group"><label>電子マネー</label><input type="number" min="0" id="salesEMoney" class="sales-input"></div>
+        <div class="input-group"><label>クレジット</label><input type="number" min="0" id="salesCredit" class="sales-input"></div>
+        <div class="input-group"><label>PayPay</label><input type="number" min="0" id="salesPaypay" class="sales-input"></div>
+        <div class="input-group"><label>売掛</label><input type="number" min="0" id="salesReceivable" class="sales-input"></div>
         <div class="result-text">売上合計: ¥<span id="salesTotalDisp">0</span></div>
     </div>
 
@@ -98,107 +104,136 @@
     <div class="section">
         <h2>5. レポート出力</h2>
         <textarea id="reportText" readonly></textarea>
-        <button id="copyBtn">レポートをコピー（LINE/Chatworkへ）</button>
+        <div class="btn-group">
+            <button class="btn-copy" id="copyBtn">📋 テキストをコピー</button>
+            <button class="btn-csv" id="csvBtn">📊 CSVダウンロード</button>
+        </div>
     </div>
 </div>
 
 <script>
-    // 日付表示
     const today = new Date();
-    document.getElementById('dateDisp').textContent = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+    const dateString = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+    document.getElementById('dateDisp').textContent = dateString;
 
-    // 数値フォーマット関数
     const formatJPY = (num) => new Intl.NumberFormat('ja-JP').format(num || 0);
+    const getVal = (id) => parseInt(document.getElementById(id).value) || 0;
 
-    // 計算処理
+    let currentData = {}; // CSV生成用にデータを保持
+
     function calculate() {
-        // 開局計算
+        // 1. 開局計算
         let opTotal = 0;
         const opGross = document.getElementById('opGross').value;
         if (opGross !== "") {
             opTotal = parseInt(opGross);
         } else {
             document.querySelectorAll('.op-coin').forEach(input => {
-                const count = parseInt(input.value) || 0;
-                const val = parseInt(input.getAttribute('data-val'));
-                opTotal += count * val;
+                opTotal += (parseInt(input.value) || 0) * parseInt(input.getAttribute('data-val'));
             });
         }
         document.getElementById('opTotalDisp').textContent = formatJPY(opTotal);
 
-        // 売上計算
-        const cashSales = parseInt(document.getElementById('salesCash').value) || 0;
-        const cardSales = parseInt(document.getElementById('salesCard').value) || 0;
-        const creditSales = parseInt(document.getElementById('salesCredit').value) || 0;
-        const totalSales = cashSales + cardSales + creditSales;
+        // 2. 売上計算
+        const cashSales = getVal('salesCash');
+        const emoneySales = getVal('salesEMoney');
+        const creditSales = getVal('salesCredit');
+        const paypaySales = getVal('salesPaypay');
+        const receivableSales = getVal('salesReceivable');
+        
+        const totalSales = cashSales + emoneySales + creditSales + paypaySales + receivableSales;
         document.getElementById('salesTotalDisp').textContent = formatJPY(totalSales);
 
-        // 閉局計算
+        // 3. 閉局計算
         let clTotal = 0;
         const clGross = document.getElementById('clGross').value;
         if (clGross !== "") {
             clTotal = parseInt(clGross);
         } else {
             document.querySelectorAll('.cl-coin').forEach(input => {
-                const count = parseInt(input.value) || 0;
-                const val = parseInt(input.getAttribute('data-val'));
-                clTotal += count * val;
+                clTotal += (parseInt(input.value) || 0) * parseInt(input.getAttribute('data-val'));
             });
         }
         document.getElementById('clTotalDisp').textContent = formatJPY(clTotal);
 
-        // 過不足計算
-        const expected = opTotal + cashSales;
+        // 4. 過不足計算
+        const expected = opTotal + cashSales; // 現金売上のみ足す
         const diff = clTotal - expected;
         document.getElementById('expectedCash').textContent = `¥${formatJPY(expected)}`;
         document.getElementById('actualCash').textContent = `¥${formatJPY(clTotal)}`;
         
         const diffElem = document.getElementById('diffCash');
         diffElem.textContent = `¥${formatJPY(diff)}`;
-        if (diff !== 0) {
-            diffElem.className = 'difference-error';
-        } else {
-            diffElem.className = '';
-        }
+        diffElem.className = diff !== 0 ? 'difference-error' : '';
 
-        // 翌日準備金
-        const nextDay = parseInt(document.getElementById('nextDayChange').value) || 0;
+        // 5. 翌日準備金
+        const nextDay = getVal('nextDayChange');
         const actionAmount = clTotal - nextDay;
-        let actionText = `¥${formatJPY(actionAmount)}`;
-        if (actionAmount > 0) {
-            actionText = `¥${formatJPY(actionAmount)} を金庫へ入金(売上回収)`;
-        } else if (actionAmount < 0) {
-            actionText = `¥${formatJPY(Math.abs(actionAmount))} を金庫から補充`;
-        } else {
-            actionText = "移動なし";
-        }
+        let actionText = "移動なし";
+        if (actionAmount > 0) actionText = `¥${formatJPY(actionAmount)} を金庫へ入金(売上回収)`;
+        if (actionAmount < 0) actionText = `¥${formatJPY(Math.abs(actionAmount))} を金庫から補充`;
         document.getElementById('depositAction').textContent = actionText;
 
-        // レポート生成
-        const report = `【レジ締めレポート】\n日付: ${document.getElementById('dateDisp').textContent}\n--------------------------\n[1] 開局時現金: ¥${formatJPY(opTotal)}\n[2] 現金売上: ¥${formatJPY(cashSales)}\n    (キャッシュレス: ¥${formatJPY(cardSales)})\n    (売掛: ¥${formatJPY(creditSales)})\n[3] 閉局時現金: ¥${formatJPY(clTotal)}\n--------------------------\n[結果] 現金過不足: ¥${formatJPY(diff)}\n--------------------------\n翌日釣り銭(残置): ¥${formatJPY(nextDay)}\n処理: ${actionText}`;
+        // レポート生成 (Text)
+        const report = `【レジ締めレポート】\n日付: ${dateString}\n--------------------------\n[1] 開局時現金: ¥${formatJPY(opTotal)}\n[2] 売上内訳\n    現金: ¥${formatJPY(cashSales)}\n    電子マネー: ¥${formatJPY(emoneySales)}\n    クレジット: ¥${formatJPY(creditSales)}\n    PayPay: ¥${formatJPY(paypaySales)}\n    売掛: ¥${formatJPY(receivableSales)}\n    (売上合計: ¥${formatJPY(totalSales)})\n[3] 閉局時現金: ¥${formatJPY(clTotal)}\n--------------------------\n[結果] 現金過不足: ¥${formatJPY(diff)}\n--------------------------\n翌日残置金: ¥${formatJPY(nextDay)}\n処理: ${actionText}`;
         document.getElementById('reportText').value = report;
+
+        // データを保持
+        currentData = {
+            date: dateString,
+            opTotal, cashSales, emoneySales, creditSales, paypaySales, receivableSales, totalSales, clTotal, diff, nextDay
+        };
     }
 
-    // イベントリスナー追加
-    document.querySelectorAll('input').forEach(input => {
-        input.addEventListener('input', calculate);
-    });
+    document.querySelectorAll('input').forEach(input => input.addEventListener('input', calculate));
 
-    // コピーボタン処理
+    // コピー機能
     document.getElementById('copyBtn').addEventListener('click', () => {
         const text = document.getElementById('reportText');
         text.select();
         document.execCommand('copy');
         const btn = document.getElementById('copyBtn');
-        btn.textContent = "✓ コピーしました！";
-        btn.style.background = "#28a745";
-        setTimeout(() => {
-            btn.textContent = "レポートをコピー（LINE/Chatworkへ）";
-            btn.style.background = "#0056b3";
-        }, 2000);
+        btn.textContent = "✓ コピーしました";
+        setTimeout(() => btn.textContent = "📋 テキストをコピー", 2000);
     });
 
-    // 初期計算実行
+    // CSVダウンロード機能
+    document.getElementById('csvBtn').addEventListener('click', () => {
+        // ヘッダー行
+        let csvContent = "\uFEFF"; // BOM (文字化け防止)
+        csvContent += "日付,項目,金額\n";
+        
+        // データ行
+        const rows = [
+            [currentData.date, "開局時現金", currentData.opTotal],
+            [currentData.date, "現金売上", currentData.cashSales],
+            [currentData.date, "電子マネー売上", currentData.emoneySales],
+            [currentData.date, "クレジット売上", currentData.creditSales],
+            [currentData.date, "PayPay売上", currentData.paypaySales],
+            [currentData.date, "売掛", currentData.receivableSales],
+            [currentData.date, "売上合計", currentData.totalSales],
+            [currentData.date, "閉局時現金", currentData.clTotal],
+            [currentData.date, "現金過不足", currentData.diff],
+            [currentData.date, "翌日残置金", currentData.nextDay]
+        ];
+
+        rows.forEach(row => {
+            csvContent += row.join(",") + "\n";
+        });
+
+        // ダウンロード処理
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `レジ締めレポート_${dateString}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    // 初期計算
     calculate();
 </script>
 </body>
